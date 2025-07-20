@@ -6,4 +6,4 @@ shap
 matplotlib
 scikit-learn
 ipython
-
+streamlit-shap

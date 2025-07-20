@@ -2,69 +2,60 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import shap
-import xgboost as xgb
 import pickle
+import xgboost as xgb
 from streamlit_shap import st_shap
+import matplotlib.pyplot as plt
 
-# Load model
-with open("best_xgb_model.pkl", "rb") as f:
-    model = pickle.load(f)
-
-# Initialize SHAP
-shap.initjs()
-
-# App title and instructions
+# Page config
 st.set_page_config(page_title="Loan Approval Predictor", page_icon="🏦")
 st.title("🏦 Loan Approval Predictor")
-st.markdown("This app predicts if a loan will be **Approved** or **Rejected** using XGBoost and explains the prediction with SHAP.")
+st.markdown("This app predicts whether a loan will be **Approved** or **Rejected** based on applicant data and explains the decision using SHAP values.")
 
-# Sidebar input form
+# Load the model
+with open("best_xgb_model.pkl", "rb") as file:
+    model = pickle.load(file)
+
+# Define input features
 st.sidebar.header("Applicant Information")
 
-no_of_dependents = st.sidebar.slider("Number of Dependents", 0, 10, 1)
-education = st.sidebar.selectbox("Education", ["Graduate", "Not Graduate"])
+no_of_dependents = st.sidebar.selectbox("Number of Dependents", [0, 1, 2, 3, 4, 5])
+education = st.sidebar.selectbox("Education Level", ["Graduate", "Not Graduate"])
 self_employed = st.sidebar.selectbox("Self Employed", ["Yes", "No"])
-loan_term = st.sidebar.slider("Loan Term (in months)", 12, 360, 120, step=12)
-cibil_score = st.sidebar.slider("CIBIL Score", 300, 900, 650)
-residential_assets_value = st.sidebar.number_input("Residential Assets Value", min_value=0, value=500000)
-commercial_assets_value = st.sidebar.number_input("Commercial Assets Value", min_value=0, value=0)
-bank_asset_value = st.sidebar.number_input("Bank Asset Value", min_value=0, value=100000)
+loan_term = st.sidebar.number_input("Loan Term (in months)", min_value=6, max_value=480, value=360, step=6)
+cibil_score = st.sidebar.slider("CIBIL Score", min_value=300, max_value=900, value=650)
+residential_assets_value = st.sidebar.number_input("Residential Assets Value", min_value=0, step=1000)
+commercial_assets_value = st.sidebar.number_input("Commercial Assets Value", min_value=0, step=1000)
+bank_asset_value = st.sidebar.number_input("Bank Asset Value", min_value=0, step=1000)
 
-# Prepare input DataFrame
+# Encode inputs
+education_encoded = 1 if education == "Graduate" else 0
+self_employed_encoded = 1 if self_employed == "Yes" else 0
+
+# Create input DataFrame
 input_data = {
     'no_of_dependents': [no_of_dependents],
-    'education': [1 if education == "Graduate" else 0],
-    'self_employed': [1 if self_employed == "Yes" else 0],
+    'education': [education_encoded],
+    'self_employed': [self_employed_encoded],
     'loan_term': [loan_term],
     'cibil_score': [cibil_score],
     'residential_assets_value': [residential_assets_value],
     'commercial_assets_value': [commercial_assets_value],
     'bank_asset_value': [bank_asset_value]
 }
-input_df = pd.DataFrame(input_data)
 
-# Ensure correct feature order
-expected_features = [
-    'no_of_dependents',
-    'education',
-    'self_employed',
-    'loan_term',
-    'cibil_score',
-    'residential_assets_value',
-    'commercial_assets_value',
-    'bank_asset_value'
-]
-input_df = input_df[expected_features]
+input_df = pd.DataFrame(input_data)
 
 # Predict and display result
 if st.button("Predict Loan Approval"):
-    prediction = model.predict(input_df)[0]
+    # Use .values to bypass feature name validation
+    prediction = model.predict(input_df.values)[0]
     prediction_label = "Approved ✅" if prediction == 1 else "Rejected ❌"
     st.subheader(f"Loan Status: {prediction_label}")
 
-    # SHAP Explanation
+    # SHAP explanation
     explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(input_df)
-    st.subheader("🔍 SHAP Explanation")
-    st_shap(shap.force_plot(explainer.expected_value, shap_values[0], input_df), height=300)
+    shap_values = explainer.shap_values(input_df.values)
 
+    st.subheader("🔍 SHAP Explanation (Why this prediction?)")
+    st_shap(shap.force_plot(explainer.expected_value, shap_values[0], input_df.iloc[0]), height=300)
